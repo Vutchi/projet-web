@@ -16,13 +16,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.post('/upload', (req, res) => {
   const textContent = (req.body.text || '').trim();
   if (!textContent) {
-    return res.status(400).send('<p>Text cannot be empty.</p><p><a href="/">Go back</a></p>');
+    return res.status(400).send(
+      renderPage(
+        'Upload error',
+        `<div class="card"><h1>Upload error</h1><p class="notice">Text cannot be empty.</p><div class="footer-links"><a class="button-link" href="/">Go back</a></div></div>`
+      )
+    );
   }
 
   const now = new Date();
   const receivedDate = now.toISOString().slice(0, 10);
   const receivedTime = now.toISOString().slice(11, 19);
   const senderUsername = (req.body.senderUsername || '').trim();
+  const sourcePage = (req.body.source || '').trim();
+  const isChatSource = sourcePage === 'chat';
 
   const submission = { textContent, receivedTime, receivedDate, senderUsername };
   submissions.push(submission);
@@ -31,13 +38,75 @@ app.post('/upload', (req, res) => {
     appendToCsv(submission);
   } catch (error) {
     console.error('Failed to write history.csv:', error);
-    return res.status(500).send('<p>Server error writing history.</p><p><a href="/">Go back</a></p>');
+    return res.status(500).send(
+      renderPage(
+        'Server error',
+        `<div class="card"><h1>Server error</h1><p class="notice">Unable to save your text right now. Please try again later.</p><div class="footer-links"><a class="button-link" href="/">Go back</a></div></div>`
+      )
+    );
   }
 
+  const extraChatLink = isChatSource ? '<a class="button-link" href="/chat">Back to chat</a>' : '';
   res.send(
-    '<p>Thank you! Your text was received.</p>' +
-      '<p><a href="/">Upload more text</a></p>' +
-      '<p><a href="/submissions">View submissions</a></p>'
+    renderPage(
+      'Submission received',
+      `<div class="card"><h1>Thank you!</h1><p>Your text was received successfully.</p><div class="footer-links"><a class="button-link" href="/">Upload more text</a><a class="button-link" href="/submissions">View submissions</a>${extraChatLink}</div></div>`
+    )
+  );
+});
+
+app.get('/chat', (req, res) => {
+  const recentSubmissions = loadCsvSubmissions().slice(-8);
+  const chatItems = recentSubmissions.length
+    ? recentSubmissions
+        .map((item, index) => {
+          const sender = item.senderUsername ? escapeHtml(item.senderUsername) : 'Anonymous';
+          const message = escapeHtml(item.textContent);
+          const bubbleClass = index % 2 === 0 ? 'chat-message--sender' : 'chat-message--user';
+          return `
+            <div class="chat-message ${bubbleClass}">
+              <div class="chat-message__body">${message}</div>
+              <div class="chat-message__meta">${sender} · ${escapeHtml(item.receivedDate)} ${escapeHtml(item.receivedTime)}</div>
+            </div>`;
+        })
+        .join('')
+    : '<div class="chat-empty"><p>Your chat window is empty. Send a message to start the conversation.</p></div>';
+
+  res.send(
+    renderPage(
+      'Chat interface',
+      `<div class="card chat-card">
+        <div class="brand">
+          <span class="brand__mark">💬</span>
+          <div>
+            <h1>Chat interface</h1>
+            <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
+          </div>
+        </div>
+
+        <div class="chat-window">${chatItems}</div>
+
+        <form class="chat-form" method="POST" action="/upload">
+          <input type="hidden" name="source" value="chat" />
+          <div class="form-row">
+            <label for="senderUsername">Username</label>
+            <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
+          </div>
+          <div class="form-row">
+            <label for="text">Message</label>
+            <textarea id="text" name="text" placeholder="Type your message here..." required></textarea>
+          </div>
+          <div class="chat-actions">
+            <button type="submit">Send message</button>
+          </div>
+        </form>
+
+        <div class="footer-links">
+          <a class="button-link" href="/">Back to upload page</a>
+          <a class="button-link" href="/submissions">View submissions</a>
+        </div>
+      </div>`
+    )
   );
 });
 
@@ -50,32 +119,12 @@ app.get('/submissions', (req, res) => {
     )
     .join('');
 
-  res.send(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Submissions</title>
-    <style>
-      body { font-family: Arial, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-      th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
-      pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
-      a { color: #0066cc; }
-    </style>
-  </head>
-  <body>
-    <h1>Received submissions</h1>
-    <p><a href="/">Back to upload page</a></p>
-    <table>
-      <thead>
-        <tr><th>#</th><th>Sender Username</th><th>Text</th><th>Date</th><th>Time</th></tr>
-      </thead>
-      <tbody>
-        ${rows || '<tr><td colspan="5">No submissions yet.</td></tr>'}
-      </tbody>
-    </table>
-  </body>
-</html>`);
+  res.send(
+    renderPage(
+      'Received submissions',
+      `<div class="card"><div class="brand"><span class="brand__mark">📥</span><div><h1>Received submissions</h1><p class="meta">Browse all saved text submissions from the form.</p></div></div><div class="table-wrapper"><table><thead><tr><th>#</th><th>Sender Username</th><th>Text</th><th>Date</th><th>Time</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No submissions yet.</td></tr>'}</tbody></table></div><div class="footer-links"><a class="button-link" href="/">Back to upload page</a></div></div>`
+    )
+  );
 });
 
 app.get('/', (req, res) => {
@@ -284,4 +333,21 @@ function escapeHtml(input) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function renderPage(title, bodyHtml) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(title)}</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      ${bodyHtml}
+    </main>
+  </body>
+</html>`;
 }
