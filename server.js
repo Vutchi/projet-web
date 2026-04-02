@@ -55,7 +55,9 @@ function getUsernameFromRequest(req) {
 app.post('/upload', (req, res) => {
   const textContent = (req.body.text || '').trim();
   const senderUsername = (req.body.senderUsername || '').trim();
-  const usernameForRender = senderUsername || getUsernameFromRequest(req);
+  const usernameFromCookie = getUsernameFromRequest(req);
+  const usernameForRender = senderUsername || usernameFromCookie;
+  const storedSenderUsername = senderUsername || usernameForRender;
 
   if (!textContent) {
     const contentTemplate = loadTemplate('chat.html');
@@ -73,7 +75,7 @@ app.post('/upload', (req, res) => {
     res.setHeader('Set-Cookie', `username=${encodeURIComponent(usernameForRender)}; Path=/; SameSite=Lax; Max-Age=31536000`);
   }
 
-  const submission = { textContent, receivedTime, receivedDate, senderUsername };
+  const submission = { textContent, receivedTime, receivedDate, senderUsername: storedSenderUsername };
   submissions.push(submission);
 
   try {
@@ -92,20 +94,51 @@ app.post('/upload', (req, res) => {
   res.redirect('/chat');
 });
 
+app.post('/delete-message', (req, res) => {
+  const currentUsername = getUsernameFromRequest(req);
+  const messageIndex = Number(req.body.messageIndex);
+
+  if (!Number.isNaN(messageIndex)) {
+    const allSubmissions = loadCsvSubmissions();
+    if (messageIndex >= 0 && messageIndex < allSubmissions.length) {
+      const item = allSubmissions[messageIndex];
+      const storedSender = item.senderUsername || '';
+
+      if (currentUsername && currentUsername === storedSender) {
+        allSubmissions.splice(messageIndex, 1);
+        submissions.splice(messageIndex, 1);
+        saveCsvSubmissions(allSubmissions);
+      }
+    }
+  }
+
+  res.redirect('/chat');
+});
+
 function buildChatItems(currentUsername = '') {
-  const recentSubmissions = loadCsvSubmissions().slice(-8);
+  const allSubmissions = loadCsvSubmissions();
+  const recentSubmissions = allSubmissions.slice(-8);
   const normalizedCurrent = currentUsername.trim();
   return recentSubmissions.length
     ? recentSubmissions
-        .map((item) => {
+        .map((item, index) => {
+          const globalIndex = allSubmissions.length - recentSubmissions.length + index;
           const sender = item.senderUsername ? escapeHtml(item.senderUsername) : 'Anonymous';
           const message = escapeHtml(item.textContent);
           const isOwnMessage = normalizedCurrent && sender === normalizedCurrent;
           const bubbleClass = isOwnMessage ? 'chat-message--user' : 'chat-message--other';
+          const deleteButton = isOwnMessage
+            ? `<form class="chat-message__delete-form" method="POST" action="/delete-message">
+                 <input type="hidden" name="messageIndex" value="${globalIndex}" />
+                 <button type="submit" class="chat-message__delete-button">Delete</button>
+               </form>`
+            : '';
+
           return `
             <div class="chat-message ${bubbleClass}">
               <div class="chat-message__body">${message}</div>
               <div class="chat-message__meta">${sender} · ${escapeHtml(item.receivedDate)} ${escapeHtml(item.receivedTime)}</div>
+              ${deleteButton}
             </div>`;
         })
         .join('')
@@ -185,8 +218,9 @@ function renderIndexPage(username) {
   return html.replace('{{usernameSection}}', usernameSection);
 }
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+const host = process.env.HOST || '0.0.0.0';
+app.listen(port, host, () => {
+  console.log(`Server running at http://${host}:${port}`);
 });
 
 function ensureCsvFile() {
@@ -363,6 +397,16 @@ function parseCsvLine(line) {
 function appendToCsv(submission) {
   const line = `${escapeCsv(submission.senderUsername)},${escapeCsv(submission.textContent)},${escapeCsv(submission.receivedDate)},${escapeCsv(submission.receivedTime)}\n`;
   fs.appendFileSync(historyCsvPath, line, 'utf8');
+}
+
+function saveCsvSubmissions(items) {
+  const header = 'senderUsername,textContent,receivedDate,receivedTime\n';
+  const body = items
+    .map(({ senderUsername, textContent, receivedDate, receivedTime }) =>
+      `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`
+    )
+    .join('\n');
+  fs.writeFileSync(historyCsvPath, header + (body ? body + '\n' : ''), 'utf8');
 }
 
 function escapeCsv(value) {

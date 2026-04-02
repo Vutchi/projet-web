@@ -221,6 +221,7 @@ button:focus-visible,
   border-radius: 22px;
   background: rgba(39, 35, 56, 0.9);
   border: 1px solid rgba(148, 130, 184, 0.18);
+  scroll-behavior: smooth;
 }
 
 .chat-message {
@@ -278,6 +279,41 @@ button:focus-visible,
 .chat-message__meta {
   font-size: 0.85rem;
   color: #b4befe;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.chat-message__delete-form {
+  margin-top: 10px;
+  justify-self: end;
+  display: none;
+}
+
+.chat-message.show-delete .chat-message__delete-form {
+  display: flex;
+}
+
+.chat-message__delete-button {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: #f38ba8;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.chat-message__delete-button:hover,
+.chat-message__delete-button:focus-visible {
+  color: #f5c2e7;
 }
 
 .chat-message--other .chat-message__meta {

@@ -22,4 +22,28 @@
     </div>
   </form>
 
+  <script>
+    window.addEventListener('load', () => {
+      const chatWindow = document.querySelector('.chat-window');
+      if (chatWindow) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+          msg.classList.remove('show-delete');
+        });
+      });
+
+      document.querySelectorAll('.chat-message--user').forEach((message) => {
+        message.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+            msg.classList.remove('show-delete');
+          });
+          message.classList.add('show-delete');
+        });
+      });
+    });
+  </script>
 </div>
