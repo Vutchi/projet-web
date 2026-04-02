@@ -1,0 +1,31 @@
+<div class="card chat-card">
+  <div class="brand">
+    <span class="brand__mark">💬</span>
+    <div>
+      <h1>Chat interface</h1>
+      <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
+    </div>
+  </div>
+
+  <div class="chat-window">{{chatItems}}</div>
+
+  <form class="chat-form" method="POST" action="/upload">
+    <input type="hidden" name="source" value="chat" />
+    <div class="form-row">
+      <label for="senderUsername">Username</label>
+      <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
+    </div>
+    <div class="form-row">
+      <label for="text">Message</label>
+      <textarea id="text" name="text" placeholder="Type your message here..." required></textarea>
+    </div>
+    <div class="chat-actions">
+      <button type="submit">Send message</button>
+    </div>
+  </form>
+
+  <div class="footer-links">
+    <a class="button-link" href="/">Back to upload page</a>
+    <a class="button-link" href="/submissions">View submissions</a>
+  </div>
+</div>

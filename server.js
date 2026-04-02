@@ -5,6 +5,7 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 const historyCsvPath = path.join(__dirname, 'history.csv');
+const templatesPath = path.join(__dirname, 'public', 'templates');
 
 ensureCsvFile();
 const submissions = loadCsvSubmissions();
@@ -17,9 +18,9 @@ app.post('/upload', (req, res) => {
   const textContent = (req.body.text || '').trim();
   if (!textContent) {
     return res.status(400).send(
-      renderPage(
+      renderPageFromTemplate(
         'Upload error',
-        `<div class="card"><h1>Upload error</h1><p class="notice">Text cannot be empty.</p><div class="footer-links"><a class="button-link" href="/">Go back</a></div></div>`
+        'upload-error.html'
       )
     );
   }
@@ -39,20 +40,17 @@ app.post('/upload', (req, res) => {
   } catch (error) {
     console.error('Failed to write history.csv:', error);
     return res.status(500).send(
-      renderPage(
+      renderPageFromTemplate(
         'Server error',
-        `<div class="card"><h1>Server error</h1><p class="notice">Unable to save your text right now. Please try again later.</p><div class="footer-links"><a class="button-link" href="/">Go back</a></div></div>`
+        'server-error.html'
       )
     );
   }
 
   const extraChatLink = isChatSource ? '<a class="button-link" href="/chat">Back to chat</a>' : '';
-  res.send(
-    renderPage(
-      'Submission received',
-      `<div class="card"><h1>Thank you!</h1><p>Your text was received successfully.</p><div class="footer-links"><a class="button-link" href="/">Upload more text</a><a class="button-link" href="/submissions">View submissions</a>${extraChatLink}</div></div>`
-    )
-  );
+  const contentTemplate = loadTemplate('submission-received.html');
+  const content = contentTemplate.replace('{{extraChatLink}}', extraChatLink);
+  res.send(renderPage('Submission received', content));
 });
 
 app.get('/chat', (req, res) => {
@@ -70,44 +68,11 @@ app.get('/chat', (req, res) => {
             </div>`;
         })
         .join('')
-    : '<div class="chat-empty"><p>Your chat window is empty. Send a message to start the conversation.</p></div>';
+    : loadTemplate('chat-empty.html');
 
-  res.send(
-    renderPage(
-      'Chat interface',
-      `<div class="card chat-card">
-        <div class="brand">
-          <span class="brand__mark">💬</span>
-          <div>
-            <h1>Chat interface</h1>
-            <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
-          </div>
-        </div>
-
-        <div class="chat-window">${chatItems}</div>
-
-        <form class="chat-form" method="POST" action="/upload">
-          <input type="hidden" name="source" value="chat" />
-          <div class="form-row">
-            <label for="senderUsername">Username</label>
-            <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
-          </div>
-          <div class="form-row">
-            <label for="text">Message</label>
-            <textarea id="text" name="text" placeholder="Type your message here..." required></textarea>
-          </div>
-          <div class="chat-actions">
-            <button type="submit">Send message</button>
-          </div>
-        </form>
-
-        <div class="footer-links">
-          <a class="button-link" href="/">Back to upload page</a>
-          <a class="button-link" href="/submissions">View submissions</a>
-        </div>
-      </div>`
-    )
-  );
+  const contentTemplate = loadTemplate('chat.html');
+  const content = contentTemplate.replace('{{chatItems}}', chatItems);
+  res.send(renderPage('Chat interface', content));
 });
 
 app.get('/submissions', (req, res) => {
@@ -119,12 +84,9 @@ app.get('/submissions', (req, res) => {
     )
     .join('');
 
-  res.send(
-    renderPage(
-      'Received submissions',
-      `<div class="card"><div class="brand"><span class="brand__mark">📥</span><div><h1>Received submissions</h1><p class="meta">Browse all saved text submissions from the form.</p></div></div><div class="table-wrapper"><table><thead><tr><th>#</th><th>Sender Username</th><th>Text</th><th>Date</th><th>Time</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No submissions yet.</td></tr>'}</tbody></table></div><div class="footer-links"><a class="button-link" href="/">Back to upload page</a></div></div>`
-    )
-  );
+  const contentTemplate = loadTemplate('submissions.html');
+  const content = contentTemplate.replace('{{rows}}', rows || loadTemplate('no-submissions.html'));
+  res.send(renderPage('Received submissions', content));
 });
 
 app.get('/', (req, res) => {
@@ -335,19 +297,24 @@ function escapeHtml(input) {
     .replace(/'/g, '&#39;');
 }
 
-function renderPage(title, bodyHtml) {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body>
-    <main class="page-shell">
-      ${bodyHtml}
-    </main>
-  </body>
-</html>`;
+function loadTemplate(filename) {
+  const filePath = path.join(templatesPath, filename);
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    console.error(`Failed to load template ${filename}:`, error);
+    return '';
+  }
+}
+
+function renderPage(title, content) {
+  const layout = loadTemplate('layout.html');
+  return layout
+    .replace('{{title}}', escapeHtml(title))
+    .replace('{{content}}', content);
+}
+
+function renderPageFromTemplate(title, templateName) {
+  const content = loadTemplate(templateName);
+  return renderPage(title, content);
 }
